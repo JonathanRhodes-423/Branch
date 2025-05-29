@@ -2,17 +2,41 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const http = require('http');
 // const { v4: uuidv4 } = require('uuid'); // Optional: for more unique IDs
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const HTTP_PORT = process.env.HTTP_PORT || 3001;
+
+// Add request logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
 
 // Add CORS middleware
 app.use((req, res, next) => {
-  // Allow requests from any origin in development
-  res.header('Access-Control-Allow-Origin', '*');
+  // Allow requests from both HTTP and HTTPS origins
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'https://localhost:3000',
+    'http://localhost:3444',
+    'https://localhost:3444',
+    'http://192.168.1.71:3000',
+    'https://192.168.1.71:3000',
+    'http://192.168.1.71:3444',
+    'https://192.168.1.71:3444'
+  ];
+  
+  const origin = req.headers.origin;
+  console.log('Request origin:', origin);
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -241,10 +265,13 @@ app.get('/api/conversations/:conversationId/messages', (req, res) => {
 });
   
   
-// --- Start the server ---
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Backend server is running on http://0.0.0.0:${PORT}`);
-    console.log(`You can access it from other devices using your computer's IP address`);
+// --- Start the servers ---
+// Create HTTP server
+const httpServer = http.createServer(app);
+httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
+    console.log(`HTTP server running on http://0.0.0.0:${HTTP_PORT}`);
+    console.log(`HTTPS server will be available through local-ssl-proxy on port 3443`);
+    console.log('Server is listening on all network interfaces');
     // Ensure all DB files exist
     ensureDbFileExists(USERS_DB_PATH);
     ensureDbFileExists(CONVERSATIONS_DB_PATH);

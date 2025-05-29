@@ -9,21 +9,30 @@ import './App.css'; // You can keep or modify this
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('branchUserToken');
   if (!token) {
-    // User not authenticated
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" replace />;
   }
   return children;
 }
 
 function App() {
+  const isAuthenticated = !!localStorage.getItem('branchUserToken');
+
   return (
-    <div className="App"> {/* */}
-      <nav>
-        {/* Basic navigation for PoC, can be improved later */}
-        <Link to="/login" style={{ marginRight: '10px' }}>Login</Link>
-        <Link to="/register">Register</Link>
+    <div className="App" style={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
+      <nav style={{ 
+        padding: '10px 20px', 
+        backgroundColor: '#fff', 
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        marginBottom: '20px'
+      }}>
+        {!isAuthenticated && (
+          <>
+            <Link to="/login" style={{ marginRight: '10px', textDecoration: 'none', color: '#007bff' }}>Login</Link>
+            <Link to="/register" style={{ textDecoration: 'none', color: '#007bff' }}>Register</Link>
+          </>
+        )}
       </nav>
-      <hr />
+
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegistrationPage />} />
@@ -35,10 +44,9 @@ function App() {
             </ProtectedRoute>
           } 
         />
-        {/* Redirect root path to login or dashboard based on auth state */}
         <Route 
           path="/" 
-          element={localStorage.getItem('branchUserToken') ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} 
+          element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} 
         />
       </Routes>
     </div>

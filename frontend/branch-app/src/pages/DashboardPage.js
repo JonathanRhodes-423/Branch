@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import VideoRecorder from './VideoRecorder';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config';
 
@@ -8,9 +9,10 @@ function DashboardPage() {
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null); // Store the whole conversation object
   const [messages, setMessages] = useState([]);
-  const [newMessageText, setNewMessageText] = useState('');
+  // const [newMessageText, setNewMessageText] = useState('');
   const [newConversationUserId, setNewConversationUserId] = useState(''); // For starting new chats
   const [error, setError] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
 
   // Check auth and get userId on mount
   useEffect(() => {
@@ -110,52 +112,67 @@ function DashboardPage() {
     }
   };
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!newMessageText.trim() || !selectedConversation || !userId) return;
+  const handleVideoSend = async (videoBlob) => {
+    if (!videoBlob || !selectedConversation || !userId) {
+      setError("Cannot send video: missing video, conversation, or user ID.");
+      return;
+    }
+    setStatusMessage('Sending video...');
     setError('');
 
+    // The actual upload and message sending will be in the next backend step.
+    // For now, let's just log it and prepare for that.
+    console.log("Video Blob received in DashboardPage:", videoBlob);
+    console.log("Blob size:", videoBlob.size, "Blob type:", videoBlob.type);
+    
+    // ---- THIS IS WHERE YOU'LL INTEGRATE THE UPLOAD (Phase 3, Backend part) ----
+    // 1. Upload videoBlob to your backend (e.g., POST /api/upload/video)
+    // 2. Get the videoURL/path back from the backend.
+    // 3. Send message metadata to POST /api/messages with the videoURL.
+
+    // For now, to simulate sending a message metadata entry (replace textContent with videoUrl later)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationId: selectedConversation.id,
-          senderId: userId,
-          textContent: newMessageText,
-        }),
-      });
-      if (response.ok) {
-        setNewMessageText(''); // Clear input
-        fetchMessages(); // Re-fetch messages for selected conversation (basic real-time feel)
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to send message");
-      }
+        const response = await fetch('https://localhost:3001/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                conversationId: selectedConversation.id,
+                senderId: userId,
+                // textContent: `Video recorded: ${videoBlob.type}, size: ${videoBlob.size} (placeholder)`, // Replace with videoUrl from backend
+                textContent: `[Video placeholder: ${ (videoBlob.size / 1024).toFixed(2) } KB]`, // Placeholder for now
+                // In next step, this will be videoUrl: "path/to/video_on_server.webm"
+            }),
+        });
+        if (response.ok) {
+            setStatusMessage('Video (placeholder) message sent!');
+            fetchMessages(); // Re-fetch messages
+        } else {
+            const errorData = await response.json();
+            throw new Error(errorData.message || "Failed to send video message metadata");
+        }
     } catch (err) {
-      console.error("Failed to send message:", err);
-      setError(err.message);
+        console.error("Failed to send video message metadata:", err);
+        setError(err.message);
+        setStatusMessage('');
     }
+    // --------------------------------------------------------------------------
   };
 
   const handleLogout = () => {
     localStorage.removeItem('branchUserToken');
     localStorage.removeItem('branchUserId');
-    setUserId(null);
-    setConversations([]);
-    setSelectedConversation(null);
-    setMessages([]);
+    setUserId(null); setConversations([]); setSelectedConversation(null); setMessages([]);
     navigate('/login');
   };
 
-  if (!userId) {
-    return <p>Loading user...</p>; // Or a spinner
-  }
+
+  if (!userId) return <p>Loading user...</p>;
 
   return (
     <div style={{ display: 'flex', height: '90vh' }}>
       <div style={{ width: '30%', borderRight: '1px solid #ccc', padding: '10px', overflowY: 'auto' }}>
-        <h2>Conversations</h2>
+        {/* ... (conversation list and new conversation form - keep as is) ... */}
+         <h2>Conversations</h2>
         <form onSubmit={handleStartNewConversation} style={{ marginBottom: '10px' }}>
           <input
             type="text"
@@ -172,14 +189,9 @@ function DashboardPage() {
             <li
               key={conv.id}
               onClick={() => handleSelectConversation(conv)}
-              style={{
-                padding: '10px',
-                cursor: 'pointer',
-                backgroundColor: selectedConversation?.id === conv.id ? '#e0e0e0' : 'transparent',
-              }}
+              style={{ /* ... styles ... */ }}
             >
-              {/* For PoC, just show other participant IDs. Enhance later. */}
-              Chat with: {conv.participants.find(pId => pId !== userId) || 'Group/Self (adjust logic)'}
+              Chat with: {conv.participants.find(pId => pId !== userId) || '...'}
               <br />
               <small>ID: {conv.id}</small>
             </li>
@@ -192,41 +204,37 @@ function DashboardPage() {
           <>
             <h3>Messages with {selectedConversation.participants.find(pId => pId !== userId) || '...'} (Conv ID: {selectedConversation.id})</h3>
             <div style={{ flexGrow: 1, border: '1px solid #eee', marginBottom: '10px', padding: '5px', overflowY: 'auto' }}>
+              {/* ... (message mapping - keep as is) ... */}
               {messages.length === 0 && <p>No messages yet. Send one!</p>}
               {messages.map((msg) => (
-                <div key={msg.id} style={{ marginBottom: '5px', textAlign: msg.senderId === userId ? 'right' : 'left' }}>
-                  <div style={{
-                      display: 'inline-block',
-                      padding: '8px 12px',
-                      borderRadius: '10px',
-                      backgroundColor: msg.senderId === userId ? '#dcf8c6' : '#f0f0f0',
-                  }}>
-                    <p style={{ margin: 0, fontSize: '0.8em', color: '#555' }}>
-                      Sender: {msg.senderId}
-                    </p>
-                    <p style={{ margin: '2px 0' }}>{msg.textContent}</p>
-                    <small style={{ fontSize: '0.7em', color: '#777' }}>
-                      {new Date(msg.timestamp).toLocaleTimeString()}
-                    </small>
-                  </div>
+                <div key={msg.id} style={{ /* ... message styles ... */ }}>
+                  {/* ... message content ... */}
+                   <p style={{ margin: 0, fontSize: '0.8em', color: '#555' }}>Sender: {msg.senderId}</p>
+                   <p style={{ margin: '2px 0' }}>{msg.textContent}</p> {/* Will show video later */}
+                   <small style={{ fontSize: '0.7em', color: '#777' }}>{new Date(msg.timestamp).toLocaleTimeString()}</small>
                 </div>
               ))}
             </div>
+            
+            {/* Replace text input with VideoRecorder */}
+            <VideoRecorder onRecordingComplete={handleVideoSend} />
+            {/* // Old text message form - remove or comment out
             <form onSubmit={handleSendMessage}>
               <input
                 type="text"
                 value={newMessageText}
                 onChange={(e) => setNewMessageText(e.target.value)}
-                placeholder="Type your message"
-                style={{ width: '80%', marginRight: '5px', padding: '8px' }}
+                // ...
               />
-              <button type="submit" style={{ padding: '8px 15px' }}>Send</button>
-            </form>
+              <button type="submit">Send</button>
+            </form> 
+            */}
           </>
         ) : (
-          <p>Select a conversation to see messages or start a new chat.</p>
+          <p>Select a conversation or start a new chat to record a video message.</p>
         )}
       </div>
+      {statusMessage && <p style={{ color: 'green', clear: 'both', padding: '10px' }}>{statusMessage}</p>}
       {error && <p style={{ color: 'red', clear: 'both', padding: '10px' }}>Error: {error}</p>}
       <button onClick={handleLogout} style={{ position: 'absolute', top: '10px', right: '10px' }}>Logout</button>
     </div>
