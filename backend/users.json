@@ -18,5 +18,10 @@
     "id": "4",
     "username": "testuser2",
     "hashedPassword": "$2b$10$aUC4KhV7OICzzj/Szg1ZeONWuH3QoOIfPHhJ0OWJ2TNzMdEJjvFau"
+  },
+  {
+    "id": "5",
+    "username": "jrhodes423",
+    "hashedPassword": "$2b$10$zshwCdkH4HhyFSRSXE64beVQJ5FRAZaN5KHBxUHZwzbPEUc5lJ3Wq"
   }
 ]

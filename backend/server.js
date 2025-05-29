@@ -1,61 +1,77 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const bcrypt = require('bcryptjs'); // For password hashing
-const cors = require('cors'); // Add CORS middleware
+const bcrypt = require('bcryptjs');
+// const { v4: uuidv4 } = require('uuid'); // Optional: for more unique IDs
 
 const app = express();
-const PORT = process.env.PORT || 3001; // Or your preferred port
+const PORT = process.env.PORT || 3001;
 
-// Enable CORS for all routes with specific options
-app.use(cors({
-  origin: 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Middleware to parse JSON request bodies
 app.use(express.json());
 
-// Add a root route handler
-app.get('/', (req, res) => {
-  res.json({ message: 'Branch API is running' });
-});
+// --- Configuration for storage paths ---
+// Use the existing storage directory at D:\BranchStorage
+const STORAGE_DIR = "D:\\BranchStorage";
+const USERS_DB_PATH = path.join(STORAGE_DIR, 'users.json');
+const CONVERSATIONS_DB_PATH = path.join(STORAGE_DIR, 'conversations.json');
+const MESSAGES_DB_PATH = path.join(STORAGE_DIR, 'messages.json');
 
-// Add debug logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-  next();
-});
-
-// --- Configuration for users.json ---
-// Store users.json in the backend directory
-const USERS_DB_PATH = path.join(__dirname, 'users.json');
-
-// Helper function to read users from users.json
-function readUsers() {
-  try {
-    if (!fs.existsSync(USERS_DB_PATH)) {
-      // If the file doesn't exist, create it with an empty array
-      fs.writeFileSync(USERS_DB_PATH, JSON.stringify([], null, 2));
-      return [];
-    }
-    const usersData = fs.readFileSync(USERS_DB_PATH);
-    return JSON.parse(usersData.toString());
-  } catch (error) {
-    console.error("Error reading users DB:", error);
-    return []; // Return empty or handle error appropriately
+// --- Helper function to ensure a file exists or create it with an empty array ---
+function ensureDbFileExists(filePath) {
+  if (!fs.existsSync(STORAGE_DIR)) {
+    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, JSON.stringify([], null, 2));
+    console.log(`Created DB file: ${filePath}`);
   }
 }
 
-// Helper function to write users to users.json
+// --- User DB Helpers (from previous phase) ---
+function readUsers() {
+  ensureDbFileExists(USERS_DB_PATH);
+  try {
+    const usersData = fs.readFileSync(USERS_DB_PATH);
+    return JSON.parse(usersData.toString());
+  } catch (error) { console.error(`Error reading ${USERS_DB_PATH}:`, error); return []; }
+}
 function writeUsers(usersArray) {
   try {
     fs.writeFileSync(USERS_DB_PATH, JSON.stringify(usersArray, null, 2));
-  } catch (error) {
-    console.error("Error writing to users DB:", error);
-  }
+  } catch (error) { console.error(`Error writing ${USERS_DB_PATH}:`, error); }
 }
+
+// --- Conversation DB Helpers ---
+function readConversations() {
+  ensureDbFileExists(CONVERSATIONS_DB_PATH);
+  try {
+    const convData = fs.readFileSync(CONVERSATIONS_DB_PATH);
+    return JSON.parse(convData.toString());
+  } catch (error) { console.error(`Error reading ${CONVERSATIONS_DB_PATH}:`, error); return []; }
+}
+function writeConversations(convArray) {
+  try {
+    fs.writeFileSync(CONVERSATIONS_DB_PATH, JSON.stringify(convArray, null, 2));
+  } catch (error) { console.error(`Error writing ${CONVERSATIONS_DB_PATH}:`, error); }
+}
+
+// --- Message DB Helpers ---
+function readMessages() {
+  ensureDbFileExists(MESSAGES_DB_PATH);
+  try {
+    const msgData = fs.readFileSync(MESSAGES_DB_PATH);
+    return JSON.parse(msgData.toString());
+  } catch (error) { console.error(`Error reading ${MESSAGES_DB_PATH}:`, error); return []; }
+}
+function writeMessages(msgArray) {
+  try {
+    fs.writeFileSync(MESSAGES_DB_PATH, JSON.stringify(msgArray, null, 2));
+  } catch (error) { console.error(`Error writing ${MESSAGES_DB_PATH}:`, error); }
+}
+
+// --- Simple ID Generation (for PoC) ---
+const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
+// If you installed uuid: const generateId = () => uuidv4()
 
 // --- API Routes for Authentication ---
 
@@ -123,15 +139,99 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 
+// POST /api/conversations: Create/find a conversation between two users.
+// For PoC, assumes a 2-participant conversation.
+// Expects body: { userId1: "id_of_logged_in_user", userId2: "id_of_other_user" }
+app.post('/api/conversations', (req, res) => {
+    const { userId1, userId2 } = req.body;
+    if (!userId1 || !userId2) {
+      return res.status(400).json({ message: "Both userId1 and userId2 are required." });
+    }
+  
+    const conversations = readConversations();
+    // Normalize participant order for consistent checking/finding
+    const participants = [userId1, userId2].sort();
+  
+    let conversation = conversations.find(
+      conv => conv.participants.length === 2 &&
+              conv.participants.includes(userId1) &&
+              conv.participants.includes(userId2)
+    );
+  
+    if (conversation) {
+      return res.status(200).json(conversation); // Found existing conversation
+    } else {
+      conversation = {
+        id: generateId(), // `conv-${conversations.length + 1}` or use uuid
+        participants: participants,
+        createdAt: new Date().toISOString()
+      };
+      conversations.push(conversation);
+      writeConversations(conversations);
+      console.log(`Conversation created: ${conversation.id} between ${userId1} and ${userId2}`);
+      return res.status(201).json(conversation);
+    }
+});
+  
+// POST /api/messages: Create a new message
+// Expects body: { conversationId: "...", senderId: "...", textContent: "..." }
+app.post('/api/messages', (req, res) => {
+    const { conversationId, senderId, textContent } = req.body;
+    if (!conversationId || !senderId || !textContent) {
+      return res.status(400).json({ message: "conversationId, senderId, and textContent are required." });
+    }
+  
+    // PoC: Basic check if conversation exists (optional, but good practice)
+    const conversations = readConversations();
+    if (!conversations.find(conv => conv.id === conversationId)) {
+        return res.status(404).json({ message: "Conversation not found." });
+    }
+  
+    const messages = readMessages();
+    const newMessage = {
+      id: generateId(), // `msg-${messages.length + 1}` or use uuid
+      conversationId,
+      senderId,
+      textContent, // Will be replaced by videoUrl later
+      timestamp: new Date().toISOString(),
+      branchParentMessageId: null // Default for main timeline messages
+    };
+    messages.push(newMessage);
+    writeMessages(messages);
+    console.log(`Message sent in conv ${conversationId} by ${senderId}`);
+    return res.status(201).json(newMessage);
+});
+  
+// GET /api/conversations: Get conversations for the logged-in user.
+// Expects query param: ?userId=some_user_id
+app.get('/api/conversations', (req, res) => {
+    const { userId } = req.query;
+    if (!userId) {
+      return res.status(400).json({ message: "userId query parameter is required." });
+    }
+  
+    const conversations = readConversations();
+    const userConversations = conversations.filter(conv => conv.participants.includes(userId));
+    res.status(200).json(userConversations);
+});
+  
+// GET /api/conversations/:conversationId/messages: Get messages for a specific conversation.
+app.get('/api/conversations/:conversationId/messages', (req, res) => {
+    const { conversationId } = req.params;
+    const messages = readMessages();
+    const conversationMessages = messages
+      .filter(msg => msg.conversationId === conversationId)
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)); // Sort by time
+  
+    res.status(200).json(conversationMessages);
+});
+  
+  
 // --- Start the server ---
-// (This part should already be in your server.js from Step 1)
 app.listen(PORT, () => {
-  console.log(`Backend server is running on http://localhost:${PORT}`);
-  // Ensure users.json exists or is created
-  if (!fs.existsSync(USERS_DB_PATH)) {
-    console.log(`Creating users database at: ${USERS_DB_PATH}`);
-    writeUsers([]);
-  } else {
-    console.log(`Using users database at: ${USERS_DB_PATH}`);
-  }
+    console.log(`Backend server is running on http://localhost:${PORT}`);
+    // Ensure all DB files exist
+    ensureDbFileExists(USERS_DB_PATH);
+    ensureDbFileExists(CONVERSATIONS_DB_PATH);
+    ensureDbFileExists(MESSAGES_DB_PATH);
 });
