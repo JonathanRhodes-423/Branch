@@ -1,93 +1,122 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import VideoRecorder from './VideoRecorder';
 import { useNavigate } from 'react-router-dom';
-import { API_BASE_URL } from '../config';
+import VideoRecorder from '../pages/VideoRecorder'; // Ensure this path is correct
+
+// IMPORTANT: Replace with your actual PC's local IP address and the correct backend port.
+// Option 1: If your local-ssl-proxy is correctly exposing your backend on an HTTPS port (e.g., 3445)
+// const API_BASE_URL = 'https://<YOUR_PC_IP_ADDRESS>:3445'; // e.g., 'https://192.168.1.100:3445'
+
+// Option 2: If you are directly hitting your Node.js HTTP backend (e.g., on port 3443)
+// This will cause mixed content if your frontend is HTTPS, but might be used for simpler PoC testing of backend logic.
+const API_BASE_URL = 'https://192.168.1.71:3443'; // e.g., 'http://192.168.1.100:3443'
+// Choose ONE of the above and replace placeholders.
 
 function DashboardPage() {
   const navigate = useNavigate();
   const [userId, setUserId] = useState(null);
   const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null); // Store the whole conversation object
+  const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
-  // const [newMessageText, setNewMessageText] = useState('');
-  const [newConversationUserId, setNewConversationUserId] = useState(''); // For starting new chats
+  const [newConversationUserId, setNewConversationUserId] = useState('');
   const [error, setError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
-  const API_BASE_URL = 'http://192.168.1.71:3001';
 
-  // Check auth and get userId on mount
   useEffect(() => {
     const token = localStorage.getItem('branchUserToken');
     const storedUserId = localStorage.getItem('branchUserId');
     if (!token || !storedUserId) {
       navigate('/login');
     } else {
+      console.log("DashboardPage: User authenticated, userId:", storedUserId);
       setUserId(storedUserId);
     }
   }, [navigate]);
 
-  // Fetch conversations when userId is set
   const fetchConversations = useCallback(async () => {
     if (!userId) return;
+    console.log("DashboardPage: Fetching conversations for userId:", userId);
     setError('');
+    setStatusMessage('Loading conversations...');
     try {
       const response = await fetch(`${API_BASE_URL}/api/conversations?userId=${userId}`);
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({})); // Try to parse error, default if not JSON
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
       setConversations(data);
+      setStatusMessage('');
     } catch (e) {
       console.error("Failed to fetch conversations:", e);
-      setError("Could not load conversations.");
+      setError(`Could not load conversations: ${e.message}`);
+      setStatusMessage('');
     }
   }, [userId]);
 
   useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
+    if (userId) {
+      fetchConversations();
+    }
+  }, [userId, fetchConversations]);
 
-  // Fetch messages when a conversation is selected
   const fetchMessages = useCallback(async () => {
     if (!selectedConversation) {
+      console.log("DashboardPage: No selected conversation, clearing messages.");
       setMessages([]);
       return;
     }
+    console.log("DashboardPage: Fetching messages for conversationId:", selectedConversation.id);
     setError('');
+    setStatusMessage(`Loading messages for chat with ${selectedConversation.participants.find(pId => pId !== userId) || '...'}...`);
     try {
       const response = await fetch(`${API_BASE_URL}/api/conversations/${selectedConversation.id}/messages`);
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
       setMessages(data);
+      setStatusMessage('');
     } catch (e) {
       console.error("Failed to fetch messages:", e);
-      setError(`Could not load messages for conversation ${selectedConversation.id}.`);
+      setError(`Could not load messages: ${e.message}`);
+      setStatusMessage('');
     }
-  }, [selectedConversation]);
+  }, [selectedConversation, userId]); // Added userId as it's used in participants.find for status
 
   useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
-
+    if (selectedConversation) {
+      fetchMessages();
+    } else {
+      setMessages([]); // Clear messages if no conversation is selected
+    }
+  }, [selectedConversation, fetchMessages]);
 
   const handleSelectConversation = (conversation) => {
+    console.log("DashboardPage: Conversation selected:", conversation);
     setSelectedConversation(conversation);
     // Messages will be fetched by the useEffect hook watching selectedConversation
   };
 
   const handleStartNewConversation = async (e) => {
     e.preventDefault();
+    console.log("handleStartNewConversation called");
+    console.log("Current userId (self):", userId);
+    console.log("Attempting to chat with userId:", newConversationUserId);
+
     if (!newConversationUserId.trim() || !userId) {
       setError("Please enter a User ID to start a conversation.");
+      console.log("Exited: newConversationUserId or userId is missing.");
       return;
     }
     if (newConversationUserId.trim() === userId) {
       setError("You cannot start a conversation with yourself.");
+      console.log("Exited: Attempting to chat with self.");
       return;
     }
     setError('');
+    setStatusMessage('Starting conversation...');
+    console.log("Proceeding to API call to start/find conversation...");
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/conversations`, {
@@ -95,43 +124,45 @@ function DashboardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId1: userId, userId2: newConversationUserId.trim() }),
       });
+
+      console.log("API call for new conversation made. Response status:", response.status);
       const newConv = await response.json();
+      console.log("API response data for new conversation:", newConv);
+
       if (response.ok) {
-        setNewConversationUserId(''); // Clear input
-        // Add to conversations list if not already there or select it
-        if (!conversations.find(c => c.id === newConv.id)) {
-          setConversations(prev => [...prev, newConv]);
-        }
+        setNewConversationUserId('');
+        setStatusMessage(`Conversation with ${newConversationUserId.trim()} started/found.`);
+        console.log("Conversation successfully started/found. New/Existing Conv:", newConv);
+        
+        setConversations(prevConvs => {
+          const existing = prevConvs.find(c => c.id === newConv.id);
+          if (existing) return prevConvs.map(c => c.id === newConv.id ? newConv : c); // Update if existing
+          return [...prevConvs, newConv];
+        });
         setSelectedConversation(newConv);
-        fetchConversations(); // Re-fetch all conversations to update list
+        // fetchConversations(); // Optionally re-fetch all if optimistic update is not enough
       } else {
-        throw new Error(newConv.message || "Failed to start conversation");
+        throw new Error(newConv.message || `Server error: ${response.status}`);
       }
     } catch (err) {
-      console.error("Failed to start new conversation:", err);
-      setError(err.message);
+      console.error("Failed to start new conversation (inside catch):", err);
+      setError(err.message || "An unknown error occurred while starting conversation.");
+      setStatusMessage('');
     }
   };
 
   const handleVideoSend = async (videoBlob) => {
     if (!videoBlob || !selectedConversation || !userId) {
-      setError("Cannot send video: missing video, conversation, or user ID.");
+      setError("Cannot send video: missing video, selected conversation, or user ID.");
+      setStatusMessage('');
       return;
     }
-    setStatusMessage('Sending video...');
+    setStatusMessage('Preparing video message...');
     setError('');
 
-    // The actual upload and message sending will be in the next backend step.
-    // For now, let's just log it and prepare for that.
     console.log("Video Blob received in DashboardPage:", videoBlob);
     console.log("Blob size:", videoBlob.size, "Blob type:", videoBlob.type);
     
-    // ---- THIS IS WHERE YOU'LL INTEGRATE THE UPLOAD (Phase 3, Backend part) ----
-    // 1. Upload videoBlob to your backend (e.g., POST /api/upload/video)
-    // 2. Get the videoURL/path back from the backend.
-    // 3. Send message metadata to POST /api/messages with the videoURL.
-
-    // For now, to simulate sending a message metadata entry (replace textContent with videoUrl later)
     try {
         const response = await fetch(`${API_BASE_URL}/api/messages`, {
             method: 'POST',
@@ -139,105 +170,129 @@ function DashboardPage() {
             body: JSON.stringify({
                 conversationId: selectedConversation.id,
                 senderId: userId,
-                // textContent: `Video recorded: ${videoBlob.type}, size: ${videoBlob.size} (placeholder)`, // Replace with videoUrl from backend
-                textContent: `[Video placeholder: ${ (videoBlob.size / 1024).toFixed(2) } KB]`, // Placeholder for now
-                // In next step, this will be videoUrl: "path/to/video_on_server.webm"
+                textContent: `[Video placeholder: ${ (videoBlob.size / 1024).toFixed(2) } KB, type: ${videoBlob.type}]`,
+                // Later, this will be: videoUrl: "path/to/video_on_server.webm"
             }),
         });
+
+        console.log("Attempted to send message metadata. Status:", response.status);
+
         if (response.ok) {
-            setStatusMessage('Video (placeholder) message sent!');
-            fetchMessages(); // Re-fetch messages
+            setStatusMessage('Video (placeholder) message sent! Refreshing messages...');
+            fetchMessages(); 
         } else {
-            const errorData = await response.json();
-            throw new Error(errorData.message || "Failed to send video message metadata");
+            const errorData = await response.json().catch(() => ({ message: "Failed to parse error response from server or server not reachable." }));
+            console.error("Server error when sending message:", errorData);
+            throw new Error(errorData.message || `Server responded with ${response.status}`);
         }
     } catch (err) {
-        console.error("Failed to send video message metadata:", err);
-        setError(err.message);
+        console.error("Full error in handleVideoSend:", err);
+        setError(`Failed to send video message. ${err.message}`);
         setStatusMessage('');
     }
-    // --------------------------------------------------------------------------
   };
 
   const handleLogout = () => {
     localStorage.removeItem('branchUserToken');
     localStorage.removeItem('branchUserId');
-    setUserId(null); setConversations([]); setSelectedConversation(null); setMessages([]);
+    setUserId(null);
+    setConversations([]);
+    setSelectedConversation(null);
+    setMessages([]);
     navigate('/login');
   };
 
+  console.log("DashboardPage rendering. userId:", userId, "selectedConversation:", selectedConversation);
 
-  if (!userId) return <p>Loading user...</p>;
+  if (!userId) {
+    return <p>Loading user data...</p>;
+  }
 
   return (
-    <div style={{ display: 'flex', height: '90vh' }}>
-      <div style={{ width: '30%', borderRight: '1px solid #ccc', padding: '10px', overflowY: 'auto' }}>
-        {/* ... (conversation list and new conversation form - keep as is) ... */}
-         <h2>Conversations</h2>
-        <form onSubmit={handleStartNewConversation} style={{ marginBottom: '10px' }}>
+    <div style={{ display: 'flex', height: 'calc(100vh - 20px)', margin: '10px' }}>
+      <div style={{ width: '30%', borderRight: '1px solid #ccc', padding: '10px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <h2>Conversations</h2>
+        <form onSubmit={handleStartNewConversation} style={{ marginBottom: '10px', display: 'flex' }}>
           <input
             type="text"
             value={newConversationUserId}
             onChange={(e) => setNewConversationUserId(e.target.value)}
             placeholder="Enter User ID to chat"
-            style={{ marginRight: '5px' }}
+            style={{ marginRight: '5px', flexGrow: 1, padding: '8px' }}
           />
-          <button type="submit">New Chat</button>
+          <button type="submit" style={{ padding: '8px 10px' }}>New Chat</button>
         </form>
-        {conversations.length === 0 && <p>No conversations yet. Start a new one!</p>}
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          {conversations.map((conv) => (
-            <li
-              key={conv.id}
-              onClick={() => handleSelectConversation(conv)}
-              style={{ /* ... styles ... */ }}
-            >
-              Chat with: {conv.participants.find(pId => pId !== userId) || '...'}
-              <br />
-              <small>ID: {conv.id}</small>
-            </li>
-          ))}
-        </ul>
+        <div style={{ flexGrow: 1, overflowY: 'auto' }}>
+          {conversations.length === 0 && !statusMessage.includes('Loading') && <p>No conversations yet. Start a new one!</p>}
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            {conversations.map((conv) => (
+              <li
+                key={conv.id}
+                onClick={() => handleSelectConversation(conv)}
+                style={{
+                  padding: '10px',
+                  cursor: 'pointer',
+                  borderBottom: '1px solid #eee',
+                  backgroundColor: selectedConversation?.id === conv.id ? '#e0e0e0' : 'transparent',
+                }}
+              >
+                Chat with: {conv.participants.filter(pId => pId !== userId).join(', ') || 'Yourself (or unknown participant)'}
+                <br />
+                <small>ID: {conv.id.substring(0, 8)}...</small>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
-      <div style={{ width: '70%', padding: '10px', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '70%', padding: '10px', display: 'flex', flexDirection: 'column', marginLeft: '10px' }}>
         {selectedConversation ? (
           <>
-            <h3>Messages with {selectedConversation.participants.find(pId => pId !== userId) || '...'} (Conv ID: {selectedConversation.id})</h3>
-            <div style={{ flexGrow: 1, border: '1px solid #eee', marginBottom: '10px', padding: '5px', overflowY: 'auto' }}>
-              {/* ... (message mapping - keep as is) ... */}
-              {messages.length === 0 && <p>No messages yet. Send one!</p>}
-              {messages.map((msg) => (
-                <div key={msg.id} style={{ /* ... message styles ... */ }}>
-                  {/* ... message content ... */}
-                   <p style={{ margin: 0, fontSize: '0.8em', color: '#555' }}>Sender: {msg.senderId}</p>
-                   <p style={{ margin: '2px 0' }}>{msg.textContent}</p> {/* Will show video later */}
-                   <small style={{ fontSize: '0.7em', color: '#777' }}>{new Date(msg.timestamp).toLocaleTimeString()}</small>
+            <h3>
+              Chat with {selectedConversation.participants.filter(pId => pId !== userId).join(', ') || '...'}
+              {/* <small style={{fontSize: '0.7em', marginLeft: '10px'}}>(Conv ID: {selectedConversation.id.substring(0,8)}...)</small> */}
+            </h3>
+            <div style={{ flexGrow: 1, border: '1px solid #eee', marginBottom: '10px', padding: '10px', overflowY: 'auto', display: 'flex', flexDirection: 'column-reverse' }}>
+              {/* Messages will appear here, reversed for chat flow */}
+              {messages.length === 0 && !statusMessage.includes('Loading') && <p style={{textAlign: 'center', color: '#777'}}>No messages yet. Send one!</p>}
+              {[...messages].reverse().map((msg) => ( // Reverse for display
+                <div key={msg.id} style={{ 
+                    marginBottom: '10px', 
+                    alignSelf: msg.senderId === userId ? 'flex-end' : 'flex-start' 
+                }}>
+                  <div style={{
+                      display: 'inline-block',
+                      padding: '8px 12px',
+                      borderRadius: '18px',
+                      backgroundColor: msg.senderId === userId ? '#dcf8c6' : '#f0f0f0',
+                      maxWidth: '70%',
+                      wordWrap: 'break-word'
+                  }}>
+                    <p style={{ margin: 0, fontSize: '0.8em', color: '#555', fontWeight: msg.senderId === userId ? 'bold': 'normal' }}>
+                      Sender: {msg.senderId === userId ? 'You' : `User ${msg.senderId}`}
+                    </p>
+                    <p style={{ margin: '4px 0' }}>{msg.textContent}</p>
+                    <small style={{ fontSize: '0.7em', color: '#777', display: 'block', textAlign: 'right' }}>
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </small>
+                  </div>
                 </div>
               ))}
             </div>
             
-            {/* Replace text input with VideoRecorder */}
-            <VideoRecorder onRecordingComplete={handleVideoSend} />
-            {/* // Old text message form - remove or comment out
-            <form onSubmit={handleSendMessage}>
-              <input
-                type="text"
-                value={newMessageText}
-                onChange={(e) => setNewMessageText(e.target.value)}
-                // ...
-              />
-              <button type="submit">Send</button>
-            </form> 
-            */}
+            <VideoRecorder onRecordingComplete={handleVideoSend} /> 
+            {console.log("DashboardPage: Rendering VideoRecorder because selectedConversation exists.")}
           </>
         ) : (
-          <p>Select a conversation or start a new chat to record a video message.</p>
+          <div style={{flexGrow:1, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <p style={{color: '#777'}}>Select a conversation or start a new chat to begin messaging.</p>
+            {console.log("DashboardPage: NOT Rendering VideoRecorder because selectedConversation is null/falsy.")}
+          </div>
         )}
       </div>
-      {statusMessage && <p style={{ color: 'green', clear: 'both', padding: '10px' }}>{statusMessage}</p>}
-      {error && <p style={{ color: 'red', clear: 'both', padding: '10px' }}>Error: {error}</p>}
-      <button onClick={handleLogout} style={{ position: 'absolute', top: '10px', right: '10px' }}>Logout</button>
+      {(statusMessage && !error) && <p style={{ color: 'green', position: 'fixed', bottom: '10px', left: '10px', background: '#f0fff0', padding: '10px', borderRadius: '5px', border: '1px solid green' }}>{statusMessage}</p>}
+      {error && <p style={{ color: 'red', position: 'fixed', bottom: '10px', left: '10px', background: '#fff0f0', padding: '10px', borderRadius: '5px', border: '1px solid red' }}>Error: {error}</p>}
+      <button onClick={handleLogout} style={{ position: 'fixed', top: '10px', right: '10px', padding: '8px 15px' }}>Logout</button>
     </div>
   );
 }
