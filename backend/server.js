@@ -7,6 +7,20 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Add CORS middleware
+app.use((req, res, next) => {
+  // Allow requests from any origin in development
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json());
 
 // --- Configuration for storage paths ---
@@ -228,8 +242,9 @@ app.get('/api/conversations/:conversationId/messages', (req, res) => {
   
   
 // --- Start the server ---
-app.listen(PORT, () => {
-    console.log(`Backend server is running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend server is running on http://0.0.0.0:${PORT}`);
+    console.log(`You can access it from other devices using your computer's IP address`);
     // Ensure all DB files exist
     ensureDbFileExists(USERS_DB_PATH);
     ensureDbFileExists(CONVERSATIONS_DB_PATH);
