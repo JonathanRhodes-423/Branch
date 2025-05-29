@@ -13,7 +13,7 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "cross-env HTTPS=true HOST=0.0.0.0 PORT=3000 WDS_SOCKET_PORT=3444 WDS_SOCKET_HOST=192.168.1.71 NODE_OPTIONS=--openssl-legacy-provider DANGEROUSLY_DISABLE_HOST_CHECK=true react-scripts start",
+    "start": "cross-env HTTPS=true HOST=0.0.0.0 PORT=3000 NODE_OPTIONS=--openssl-legacy-provider DANGEROUSLY_DISABLE_HOST_CHECK=true react-scripts start",
     "build": "set NODE_OPTIONS=--openssl-legacy-provider && react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

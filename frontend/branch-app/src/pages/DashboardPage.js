@@ -13,6 +13,7 @@ function DashboardPage() {
   const [newConversationUserId, setNewConversationUserId] = useState(''); // For starting new chats
   const [error, setError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
+  const API_BASE_URL = 'http://192.168.1.71:3001';
 
   // Check auth and get userId on mount
   useEffect(() => {
@@ -132,7 +133,7 @@ function DashboardPage() {
 
     // For now, to simulate sending a message metadata entry (replace textContent with videoUrl later)
     try {
-        const response = await fetch('https://localhost:3001/api/messages', {
+        const response = await fetch(`${API_BASE_URL}/api/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
