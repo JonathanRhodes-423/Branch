@@ -157,40 +157,56 @@ function DashboardPage() {
       setStatusMessage('');
       return;
     }
-    setStatusMessage('Preparing video message...');
+    setStatusMessage('Uploading video...');
     setError('');
 
-    console.log("Video Blob received in DashboardPage:", videoBlob);
-    console.log("Blob size:", videoBlob.size, "Blob type:", videoBlob.type);
-    
+    const formData = new FormData();
+    formData.append('video', videoBlob, `video-${Date.now()}.webm`); // Key 'video' must match multer on backend
+
     try {
-        const response = await fetch(`${API_BASE_URL}/api/messages`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                conversationId: selectedConversation.id,
-                senderId: userId,
-                textContent: `[Video placeholder: ${ (videoBlob.size / 1024).toFixed(2) } KB, type: ${videoBlob.type}]`,
-                // Later, this will be: videoUrl: "path/to/video_on_server.webm"
-            }),
-        });
+      // 1. Upload the video file
+      const uploadResponse = await fetch(`${API_BASE_URL}/api/upload/video`, {
+        method: 'POST',
+        body: formData, // Don't set Content-Type header manually for FormData
+      });
 
-        console.log("Attempted to send message metadata. Status:", response.status);
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json().catch(() => ({ message: "Video upload failed, couldn't parse error."}));
+        throw new Error(errorData.message || `Video upload failed: ${uploadResponse.status}`);
+      }
 
-        if (response.ok) {
-            setStatusMessage('Video (placeholder) message sent! Refreshing messages...');
-            fetchMessages(); 
-        } else {
-            const errorData = await response.json().catch(() => ({ message: "Failed to parse error response from server or server not reachable." }));
-            console.error("Server error when sending message:", errorData);
-            throw new Error(errorData.message || `Server responded with ${response.status}`);
-        }
+      const uploadResult = await uploadResponse.json();
+      const { videoUrl } = uploadResult; // This is the relative URL from the backend, e.g., /videos/filename.webm
+
+      console.log("Video uploaded, server path:", videoUrl);
+      setStatusMessage('Video uploaded! Sending message...');
+
+      // 2. Send the message metadata with the videoUrl
+      const messageResponse = await fetch(`${API_BASE_URL}/api/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId: selectedConversation.id,
+          senderId: userId,
+          videoUrl: videoUrl, // Use the URL from the upload response
+          textContent: null, // Or add a caption input later
+        }),
+      });
+
+      if (!messageResponse.ok) {
+        const errorData = await messageResponse.json().catch(() => ({ message: "Sending message metadata failed, couldn't parse error."}));
+        throw new Error(errorData.message || `Sending message metadata failed: ${messageResponse.status}`);
+      }
+
+      setStatusMessage('Video message sent!');
+      fetchMessages(); // Re-fetch messages to show the new video message
     } catch (err) {
-        console.error("Full error in handleVideoSend:", err);
-        setError(`Failed to send video message. ${err.message}`);
-        setStatusMessage('');
+      console.error("Error in handleVideoSend:", err);
+      setError(err.message || "An error occurred while sending the video.");
+      setStatusMessage('');
     }
   };
+
 
   const handleLogout = () => {
     localStorage.removeItem('branchUserToken');
@@ -271,7 +287,18 @@ function DashboardPage() {
                     <p style={{ margin: 0, fontSize: '0.8em', color: '#555', fontWeight: msg.senderId === userId ? 'bold': 'normal' }}>
                       Sender: {msg.senderId === userId ? 'You' : `User ${msg.senderId}`}
                     </p>
-                    <p style={{ margin: '4px 0' }}>{msg.textContent}</p>
+                    {msg.textContent && <p style={{ margin: '4px 0' }}>{msg.textContent}</p>}
+        
+                    {msg.videoUrl && (
+                      <video 
+                        src={`${API_BASE_URL}${msg.videoUrl}`} // Crucial: Prepend API_BASE_URL
+                        controls 
+                        style={{ maxWidth: '100%', width: '280px', maxHeight: '200px', marginTop: '5px', borderRadius: '10px' }}
+                        onError={(e) => console.error('Video Error:', e.target.error, 'for URL:', e.target.src)}
+                      >
+                        Your browser does not support the video tag.
+                      </video>
+                    )}
                     <small style={{ fontSize: '0.7em', color: '#777', display: 'block', textAlign: 'right' }}>
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </small>
