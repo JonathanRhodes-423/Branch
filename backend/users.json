@@ -1,0 +1,22 @@
+[
+  {
+    "id": "1",
+    "username": "testuser",
+    "hashedPassword": "a_long_hashed_password_string_here"
+  },
+  {
+    "id": "2",
+    "username": "newuser",
+    "hashedPassword": "$2b$10$NpXDMWlJ7FlHBQzZ0/1HJ.wjCwlU4GnPAhXu5.AZIxgSRt8uelp8."
+  },
+  {
+    "id": "3",
+    "username": "username",
+    "hashedPassword": "$2b$10$p.UihicMtjcAH.gUpxXdXeE4VADyDaVKbGyTPEiw/X0Mat2DHd8wu"
+  },
+  {
+    "id": "4",
+    "username": "testuser2",
+    "hashedPassword": "$2b$10$aUC4KhV7OICzzj/Szg1ZeONWuH3QoOIfPHhJ0OWJ2TNzMdEJjvFau"
+  }
+]

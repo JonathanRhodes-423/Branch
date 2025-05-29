@@ -1,0 +1,29 @@
+{
+  "name": "branch-backend-poc",
+  "version": "0.1.0",
+  "description": "Backend for the Branch video messaging Proof of Concept (PoC) application.",
+  "main": "server.js",
+  "scripts": {
+    "start": "nodemon server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "branch",
+    "video",
+    "messaging",
+    "chat",
+    "express",
+    "nodejs",
+    "poc"
+  ],
+  "author": "[Branch Developer]",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "express": "^4.17.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
